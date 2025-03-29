@@ -1,0 +1,89 @@
+
+const config = {
+  delay: 2000,          // Задержка между действиями
+  scrollStep: 600,      // Размер прокрутки (увеличено)
+  maxTracks: 100,       // Максимум треков
+  scrollAttempts: 5     // Попыток прокрутки перед остановкой
+};
+
+let state = {
+  processed: new Set(),
+  scrollCounter: 0,
+  lastPosition: 0
+};
+
+// Умная прокрутка с контролем результата
+async function smartScroll() {
+  const startPos = window.pageYOffset;
+  window.scrollBy(0, config.scrollStep);
+  
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const scrolled = window.pageYOffset > startPos;
+      console.log(scrolled ? 'Прокрутка успешна' : 'Прокрутка не сработала');
+      resolve(scrolled);
+    }, 1000);
+  });
+}
+
+// Поиск кнопок с учетом видимости
+function findVisibleButtons() {
+  return Array.from(
+    document.querySelectorAll('button[aria-label*="npasurca"], button[aria-label*="нравится"]')
+  ).filter(btn => {
+    const rect = btn.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+}
+
+// Основной цикл
+async function processTracks() {
+  if (state.processed.size >= config.maxTracks) {
+    console.log('✅ Завершено. Обработано:', state.processed.size);
+    return;
+  }
+
+  // 1. Поиск кнопок
+  const buttons = findVisibleButtons();
+  const newButtons = buttons.filter(btn => !state.processed.has(btn));
+
+  // 2. Если есть что обрабатывать
+  if (newButtons.length > 0) {
+    newButtons[0].click();
+    state.processed.add(newButtons[0]);
+    state.scrollCounter = 0;
+    console.log(`♻️ Обработано: ${state.processed.size}/${config.maxTracks}`);
+    
+    await new Promise(r => setTimeout(r, config.delay));
+    return processTracks();
+  }
+
+  // 3. Если нужна прокрутка
+  if (state.scrollCounter < config.scrollAttempts) {
+    const scrolled = await smartScroll();
+    state.scrollCounter = scrolled ? 0 : state.scrollCounter + 1;
+    await new Promise(r => setTimeout(r, config.delay));
+    return processTracks();
+  }
+
+  console.log('⚠️ Прекращаю: не могу найти новые треки');
+}
+
+// Запуск с проверкой
+function init() {
+  console.log('🔍 Анализ страницы...');
+  
+  // Проверяем, что мы на нужной странице
+  if (findVisibleButtons().length === 0) {
+    console.warn('Кнопки не найдены! Убедитесь что:');
+    console.warn('1. Вы находитесь в разделе "Моя волна" или плейлисте');
+    console.warn('2. Страница полностью загрузилась');
+    return;
+  }
+  
+  console.log('🚀 Запуск обработки...');
+  processTracks();
+}
+
+// Автозапуск
+setTimeout(init, 2000);
